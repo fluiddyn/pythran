@@ -545,11 +545,22 @@ namespace types
   }
 
   template <class T, size_t N>
-  template <class... Tys>
-  auto ndarray<T, N>::operator[](std::tuple<Tys...> const &indices) const
-      -> decltype((*this)[to_array<long>(indices)])
+  template <class Ty0, class Ty1, class... Tys>
+  auto ndarray<T, N>::
+  operator[](std::tuple<Ty0, Ty1, Tys...> const &indices) const ->
+      typename std::enable_if<!std::is_same<Ty0, long>::value,
+                              decltype((*this)[to_array<long>(indices)])>::type
   {
     return (*this)[to_array<long>(indices)];
+  }
+
+  template <class T, size_t N>
+  template <class Ty, class... Tys>
+  auto ndarray<T, N>::
+  operator[](std::tuple<long, Ty, Tys...> const &indices) const
+      -> decltype((*this)[std::get<0>(indices)][tuple_tail(indices)])
+  {
+    return (*this)[std::get<0>(indices)][tuple_tail(indices)];
   }
 
 #ifdef USE_BOOST_SIMD
@@ -668,6 +679,19 @@ namespace types
   ndarray<T, N>::fast(F const &filter) const
   {
     return {*this, filter};
+  }
+
+  template <class T, size_t N>
+  template <class Elt, class Ty, class... Tys>
+  auto ndarray<T, N>::
+  operator[](std::tuple<list<Elt>, Ty, Tys...> const &indices) const
+      -> decltype((*this)[tuple_tail(indices)])
+  {
+    return ndarray<T, N>
+    {
+      (*this)[std::get<0>(indices)]
+    }
+    [tuple_tail(indices)];
   }
 
   /* through iterators */
