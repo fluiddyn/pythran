@@ -205,7 +205,10 @@ namespace types
                                 !is_array_index<F>::value &&
                                 !std::is_same<bool, typename F::dtype>::value,
                             numpy_vexpr<numpy_iexpr, F>>::type
-    operator[](F const &filter) const;
+    operator[](F const &filter) const
+    {
+      return {*this, filter};
+    }
 
     template <class Ty>
     auto operator[](std::tuple<Ty> const &index) const
