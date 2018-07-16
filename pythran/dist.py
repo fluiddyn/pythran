@@ -7,19 +7,15 @@ import pythran.config as cfg
 
 import os.path
 import os
-import logging
 
 from distutils.command.build_ext import build_ext as LegacyBuildExt
 
 from numpy.distutils.extension import Extension
 
 
-logger = logging.getLogger('pythran')
-
-
 class PythranBuildExt(LegacyBuildExt):
-    """Subclass of `distutils.command.build_ext.build_ext` which is required to build
-    `PythranExtension` with the configured C++ compiler. It may also be
+    """Subclass of `distutils.command.build_ext.build_ext` which is required to
+    build `PythranExtension` with the configured C++ compiler. It may also be
     subclassed if you want to combine with another build_ext class (NumPy,
     Cython implementations).
 
@@ -104,7 +100,4 @@ class PythranExtension(Extension):
 
         cfg_ext = cfg.make_extension(**kwargs)
         self.cxx = cfg_ext.pop('cxx')
-        logger.warn('Requires pythran.dist.PythranBuildExt or a subclass of it '
-                    'to build this extension with configured C++ compiler.')
-        # TODO: Change to logger.info in later releases.
         Extension.__init__(self, name, cxx_sources, *args, **cfg_ext)
