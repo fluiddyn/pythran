@@ -7,102 +7,122 @@
 
 namespace std
 {
-  std::complex<double> operator+(std::complex<double> self, long other)
+  template <class T, class S>
+  complex_broadcast_t<T, S> operator+(std::complex<T> self, S other)
   {
-    return self + double(other);
+    return (complex_broadcast_t<T, S>)self +
+           (typename std::common_type<T, S>::type)(other);
   }
 
-  std::complex<double> operator+(long self, std::complex<double> other)
+  template <class T, class S>
+  complex_broadcast_t<T, S> operator+(S self, std::complex<T> other)
   {
-    return double(self) + other;
+    return (typename std::common_type<T, S>::type)(self) +
+           (complex_broadcast_t<T, S>)other;
   }
 
-  std::complex<double> operator-(std::complex<double> self, long other)
+  template <class T, class S>
+  complex_broadcast_t<T, S> operator-(std::complex<T> self, S other)
   {
-    return self - double(other);
+    return (complex_broadcast_t<T, S>)self -
+           (typename std::common_type<T, S>::type)(other);
   }
 
-  std::complex<double> operator-(long self, std::complex<double> other)
+  template <class T, class S>
+  complex_broadcast_t<T, S> operator-(S self, std::complex<T> other)
   {
-    return double(self) - other;
+    return (typename std::common_type<T, S>::type)(self) -
+           (complex_broadcast_t<T, S>)other;
   }
 
-  std::complex<double> operator*(std::complex<double> self, long other)
+  template <class T, class S>
+  complex_broadcast_t<T, S> operator*(std::complex<T> self, S other)
   {
-    return self * double(other);
+    return (complex_broadcast_t<T, S>)self *
+           (typename std::common_type<T, S>::type)(other);
   }
 
-  std::complex<double> operator*(long self, std::complex<double> other)
+  template <class T, class S>
+  complex_broadcast_t<T, S> operator*(S self, std::complex<T> other)
   {
-    return double(self) * other;
+    return (typename std::common_type<T, S>::type)(self) *
+           (complex_broadcast_t<T, S>)other;
   }
 
-  std::complex<double> operator/(std::complex<double> self, long other)
+  template <class T, class S>
+  complex_broadcast_t<T, S> operator/(std::complex<T> self, S other)
   {
-    return self / double(other);
+    return (complex_broadcast_t<T, S>)self /
+           (typename std::common_type<T, S>::type)(other);
   }
 
-  std::complex<double> operator/(long self, std::complex<double> other)
+  template <class T, class S>
+  complex_broadcast_t<T, S> operator/(S self, std::complex<T> other)
   {
-    return double(self) / other;
+    return (typename std::common_type<T, S>::type)(self) /
+           (complex_broadcast_t<T, S>)other;
   }
 
-  bool operator==(std::complex<double> self, long other)
+  template <class T, class S>
+  complex_bool_t<T, S> operator==(std::complex<T> self, S other)
   {
-    return self == double(other);
+    return self == T(other);
   }
 
-  bool operator==(long self, std::complex<double> other)
+  template <class T, class S>
+  complex_bool_t<T, S> operator==(S self, std::complex<T> other)
   {
-    return double(self) == other;
+    return T(self) == other;
   }
 
-  bool operator!=(std::complex<double> self, long other)
+  template <class T, class S>
+  complex_bool_t<T, S> operator!=(std::complex<T> self, S other)
   {
-    return self != double(other);
+    return self != T(other);
   }
 
-  bool operator!=(long self, std::complex<double> other)
+  template <class T, class S>
+  complex_bool_t<T, S> operator!=(S self, std::complex<T> other)
   {
-    return double(self) != other;
+    return T(self) != other;
   }
 
-  template <class T>
-  bool operator<(std::complex<T> self, std::complex<T> other)
+  template <class T, class S>
+  bool operator<(std::complex<T> self, std::complex<S> other)
   {
     return self.real() == other.real() ? self.imag() < other.imag()
                                        : self.real() < other.real();
   }
 
-  template <class T>
-  bool operator<=(std::complex<T> self, std::complex<T> other)
+  template <class T, class S>
+  bool operator<=(std::complex<T> self, std::complex<S> other)
   {
     return self.real() == other.real() ? self.imag() <= other.imag()
                                        : self.real() <= other.real();
   }
 
-  template <class T>
-  bool operator>(std::complex<T> self, std::complex<T> other)
+  template <class T, class S>
+  bool operator>(std::complex<T> self, std::complex<S> other)
   {
     return self.real() == other.real() ? self.imag() > other.imag()
                                        : self.real() > other.real();
   }
 
-  template <class T>
-  bool operator>=(std::complex<T> self, std::complex<T> other)
+  template <class T, class S>
+  bool operator>=(std::complex<T> self, std::complex<S> other)
   {
     return self.real() == other.real() ? self.imag() >= other.imag()
                                        : self.real() >= other.real();
   }
 
-  template <class T>
-  bool operator&&(std::complex<T> self, std::complex<T> other)
+  template <class T, class S>
+  bool operator&&(std::complex<T> self, std::complex<S> other)
   {
     return (self.real() || self.imag()) && (other.real() || other.imag());
   }
 
-  template <class T>
-  bool operator||(std::complex<T> self, std::complex<T> other)
+  template <class T, class S>
+  bool operator||(std::complex<T> self, std::complex<S> other)
   {
     return (self.real() || self.imag()) || (other.real() || other.imag());
   }
@@ -111,6 +131,11 @@ namespace std
   {
     return !self.real() && !self.imag();
   }
+  template <class T>
+  size_t hash<std::complex<T>>::operator()(std::complex<T> const &x) const
+  {
+    return std::hash<T>{}(x.real()) ^ std::hash<T>{}(x.imag());
+  };
 }
 
 PYTHONIC_NS_BEGIN
@@ -118,8 +143,8 @@ PYTHONIC_NS_BEGIN
 namespace __builtin__
 {
 
-  template <size_t AttributeID>
-  double getattr(std::complex<double> const &self)
+  template <size_t AttributeID, class T>
+  T getattr(std::complex<T> const &self)
   {
     return AttributeID == pythonic::types::attr::REAL ? std::real(self)
                                                       : std::imag(self);
@@ -130,29 +155,69 @@ PYTHONIC_NS_END
 #ifdef ENABLE_PYTHON_MODULE
 
 #include "pythonic/python/core.hpp"
+#include "numpy/arrayscalars.h"
 
 PYTHONIC_NS_BEGIN
 
-template <class T>
-PyObject *to_python<std::complex<T>>::convert(std::complex<T> const &c)
+template <>
+PyObject *to_python<std::complex<long double>>::convert(
+    std::complex<long double> const &c)
+{
+  return PyArray_Scalar(const_cast<std::complex<long double> *>(&c),
+                        PyArray_DescrFromType(NPY_CLONGDOUBLE), nullptr);
+}
+
+template <>
+PyObject *
+to_python<std::complex<double>>::convert(std::complex<double> const &c)
 {
   return PyComplex_FromDoubles(c.real(), c.imag());
 }
 
-template <class T>
-bool from_python<std::complex<T>>::is_convertible(PyObject *obj)
+template <>
+PyObject *to_python<std::complex<float>>::convert(std::complex<float> const &c)
+{
+  return PyArray_Scalar(const_cast<std::complex<float> *>(&c),
+                        PyArray_DescrFromType(NPY_CFLOAT), nullptr);
+}
+
+template <>
+bool from_python<std::complex<long double>>::is_convertible(PyObject *obj)
+{
+  return PyArray_IsScalar(obj, CLongDouble);
+}
+
+template <>
+bool from_python<std::complex<double>>::is_convertible(PyObject *obj)
 {
   return PyComplex_Check(obj);
 }
-template <class T>
-std::complex<T> from_python<std::complex<T>>::convert(PyObject *obj)
+
+template <>
+bool from_python<std::complex<float>>::is_convertible(PyObject *obj)
 {
-  if (PyComplex_Check(obj))
-    return {PyComplex_RealAsDouble(obj), PyComplex_ImagAsDouble(obj)};
-  else if (PyFloat_Check(obj))
-    return {PyFloat_AsDouble(obj), 0.};
-  else
-    return {(double)PyInt_AsLong(obj), 0.};
+  return PyArray_IsScalar(obj, CFloat);
+}
+
+template <>
+std::complex<long double>
+from_python<std::complex<long double>>::convert(PyObject *obj)
+{
+  auto val = PyArrayScalar_VAL(obj, CLongDouble);
+  return {val.real, val.imag};
+}
+
+template <>
+std::complex<double> from_python<std::complex<double>>::convert(PyObject *obj)
+{
+  return {PyComplex_RealAsDouble(obj), PyComplex_ImagAsDouble(obj)};
+}
+
+template <>
+std::complex<float> from_python<std::complex<float>>::convert(PyObject *obj)
+{
+  auto val = PyArrayScalar_VAL(obj, CFloat);
+  return {val.real, val.imag};
 }
 PYTHONIC_NS_END
 #endif

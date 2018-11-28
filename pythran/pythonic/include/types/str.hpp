@@ -2,7 +2,6 @@
 #define PYTHONIC_INCLUDE_TYPES_STR_HPP
 
 #include "pythonic/include/types/slice.hpp"
-#include "pythonic/include/types/long.hpp"
 #include "pythonic/include/types/tuple.hpp"
 
 #include "pythonic/include/types/assignable.hpp"
@@ -22,21 +21,7 @@ namespace types
 {
 
   class str;
-
-  struct const_sliced_str_iterator
-      : std::iterator<std::random_access_iterator_tag, char, ptrdiff_t, char *,
-                      char> {
-    const char *data;
-    long step;
-    const_sliced_str_iterator(char const *data, long step);
-    const_sliced_str_iterator operator++();
-    bool operator<(const_sliced_str_iterator const &other) const;
-    bool operator==(const_sliced_str_iterator const &other) const;
-    bool operator!=(const_sliced_str_iterator const &other) const;
-    char operator*() const;
-    const_sliced_str_iterator operator-(long n) const;
-    long operator-(const_sliced_str_iterator const &other) const;
-  };
+  struct const_sliced_str_iterator;
 
   template <class S = slice>
   class sliced_str
@@ -84,10 +69,8 @@ namespace types
     long size() const;
 
     // accessor
-    char operator[](long i) const;
-    char &operator[](long i);
-    char fast(long i) const;
-    char &fast(long i);
+    str operator[](long i) const;
+    str fast(long i) const;
     sliced_str<slice> operator[](slice const &s) const;
     sliced_str<contiguous_slice> operator[](contiguous_slice const &s) const;
 
@@ -105,6 +88,8 @@ namespace types
                                     types::sliced_str<SS> const &v);
   };
 
+  struct string_iterator;
+
   class str
   {
 
@@ -119,24 +104,28 @@ namespace types
     static constexpr bool is_vectorizable = false;
 
     using value_type = str; // in Python, a string contains... strings
-    using iterator = container_type::iterator;
-    using reverse_iterator = container_type::reverse_iterator;
-    using const_reverse_iterator = container_type::const_reverse_iterator;
+    using iterator = string_iterator;
+    using reverse_iterator = std::reverse_iterator<string_iterator>;
+    using const_reverse_iterator = std::reverse_iterator<string_iterator>;
 
     str();
     str(std::string const &s);
     str(std::string &&s);
+    explicit str(char c);
     str(const char *s);
+    template <size_t N>
+    str(const char(&s)[N]);
     str(const char *s, size_t n);
-    str(char c);
     template <class S>
     str(sliced_str<S> const &other);
     template <class T>
     str(T const &begin, T const &end);
+    template <class T>
+    explicit str(T const &);
 
     explicit operator char() const;
-    operator long int() const;
-    operator pythran_long_t() const;
+    explicit operator long int() const;
+    explicit operator float() const;
     explicit operator double() const;
 
     template <class S>
@@ -147,15 +136,19 @@ namespace types
     container_type const &get_data() const;
 
     long size() const;
-    auto begin() const -> decltype(data->begin());
-    auto begin() -> decltype(data->begin());
-    auto rbegin() const -> decltype(data->rbegin());
-    auto rbegin() -> decltype(data->rbegin());
-    auto end() const -> decltype(data->end());
-    auto end() -> decltype(data->end());
-    auto rend() const -> decltype(data->rend());
-    auto rend() -> decltype(data->rend());
+    iterator begin() const;
+    reverse_iterator rbegin() const;
+    iterator end() const;
+    reverse_iterator rend() const;
     auto c_str() const -> decltype(data->c_str());
+    std::string &chars()
+    {
+      return *data;
+    }
+    std::string const &chars() const
+    {
+      return *data;
+    }
     auto resize(long n) -> decltype(data->resize(n));
     long find(str const &s, size_t pos = 0) const;
     bool contains(str const &v) const;
@@ -179,25 +172,89 @@ namespace types
     bool operator>(str const &other) const;
     template <class S>
     bool operator==(sliced_str<S> const &other) const;
+
     sliced_str<slice> operator()(slice const &s) const;
     sliced_str<contiguous_slice> operator()(contiguous_slice const &s) const;
 
-    char operator[](long i) const;
-    char &operator[](long i);
-    char fast(long i) const;
-    char &fast(long i);
+    str operator[](long i) const;
+    str fast(long i) const;
 
     sliced_str<slice> operator[](slice const &s) const;
     sliced_str<contiguous_slice> operator[](contiguous_slice const &s) const;
-#ifdef USE_GMP
-    char operator[](pythran_long_t const &m) const;
-    char &operator[](pythran_long_t const &m);
-    char fast(pythran_long_t const &m) const;
-    char &fast(pythran_long_t const &m);
-#endif
 
     explicit operator bool() const;
     long count(types::str const &sub) const;
+
+    intptr_t id() const
+    {
+      return reinterpret_cast<intptr_t>(&(*data));
+    }
+  };
+
+  struct string_iterator : std::iterator<std::random_access_iterator_tag, str,
+                                         std::ptrdiff_t, str *, str> {
+    std::string::const_iterator curr;
+    string_iterator(std::string::const_iterator iter) : curr(iter)
+    {
+    }
+    str operator*() const
+    {
+      return str(*curr);
+    }
+    string_iterator &operator++()
+    {
+      ++curr;
+      return *this;
+    }
+    string_iterator &operator+=(std::size_t n)
+    {
+      curr += n;
+      return *this;
+    }
+    string_iterator operator+(std::size_t n)
+    {
+      return {curr + n};
+    }
+    string_iterator &operator--()
+    {
+      --curr;
+      return *this;
+    }
+    string_iterator &operator-=(std::size_t n)
+    {
+      curr -= n;
+      return *this;
+    }
+    string_iterator operator-(std::size_t n)
+    {
+      return {curr - n};
+    }
+    bool operator==(string_iterator const &other) const
+    {
+      return curr == other.curr;
+    }
+    bool operator!=(string_iterator const &other) const
+    {
+      return curr != other.curr;
+    }
+    std::ptrdiff_t operator-(string_iterator const &other) const
+    {
+      return curr - other.curr;
+    }
+  };
+  struct const_sliced_str_iterator
+      : std::iterator<std::random_access_iterator_tag, str, std::ptrdiff_t,
+                      str *, str> {
+    const char *data;
+    long step;
+    const_sliced_str_iterator(char const *data, long step);
+    const_sliced_str_iterator operator++();
+    bool operator<(const_sliced_str_iterator const &other) const;
+    bool operator==(const_sliced_str_iterator const &other) const;
+    bool operator!=(const_sliced_str_iterator const &other) const;
+    str operator*() const;
+    const_sliced_str_iterator operator-(long n) const;
+    long operator-(const_sliced_str_iterator const &other) const;
   };
 
   size_t hash_value(str const &x);
@@ -210,10 +267,9 @@ namespace types
   template <size_t N>
   str operator+(char const(&self)[N], str const &other);
 
-  bool operator==(char c, str const &s);
-  bool operator==(str const &s, char c);
-  bool operator!=(char c, str const &s);
-  bool operator!=(str const &s, char c);
+  template <size_t N>
+  bool operator==(char const(&self)[N], str const &other);
+
   std::ostream &operator<<(std::ostream &os, str const &s);
 }
 
@@ -223,6 +279,11 @@ namespace operator_
   template <size_t N, class Arg>
   auto mod(const char(&fmt)[N], Arg &&arg)
       -> decltype(pythonic::types::str(fmt) % std::forward<Arg>(arg));
+
+  pythonic::types::str add(char const *self, char const *other);
+
+  pythonic::types::str mul(char const *self, long other);
+  pythonic::types::str mul(long self, char const *other);
 }
 
 template <>
@@ -301,10 +362,6 @@ struct to_python<types::str> {
 template <class S>
 struct to_python<types::sliced_str<S>> {
   static PyObject *convert(types::sliced_str<S> const &v);
-};
-template <>
-struct to_python<char> {
-  static PyObject *convert(char l);
 };
 
 template <>

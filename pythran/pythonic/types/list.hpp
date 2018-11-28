@@ -7,6 +7,7 @@
 #include "pythonic/__builtin__/len.hpp"
 #include "pythonic/types/slice.hpp"
 #include "pythonic/types/tuple.hpp"
+#include "pythonic/types/bool.hpp"
 #include "pythonic/utils/shared_ref.hpp"
 #include "pythonic/utils/reserve.hpp"
 
@@ -140,7 +141,7 @@ namespace types
     return *this;
   }
   template <class T, class S>
-  list<T> sliced_list<T, S>::operator+(list<T> const &s)
+  list<T> sliced_list<T, S>::operator+(list<T> const &s) const
   {
     list<T> out(size() + s.size());
     std::copy(s.begin(), s.end(), std::copy(begin(), end(), out.begin()));
@@ -148,16 +149,18 @@ namespace types
   }
   template <class T, class S>
   template <size_t N>
-  list<T> sliced_list<T, S>::operator+(array<T, N> const &s)
+  list<T> sliced_list<T, S>::operator+(array<T, N> const &s) const
   {
     list<T> out(size() + s.size());
     std::copy(s.begin(), s.end(), std::copy(begin(), end(), out.begin()));
     return out;
   }
   template <class T, class S>
-  list<T> sliced_list<T, S>::operator+(sliced_list<T, S> const &s)
+  template <class Tp, class Sp>
+  list<typename __combined<T, Tp>::type> sliced_list<T, S>::
+  operator+(sliced_list<Tp, Sp> const &s) const
   {
-    list<T> out(size() + s.size());
+    list<typename __combined<T, Tp>::type> out(size() + s.size());
     std::copy(s.begin(), s.end(), std::copy(begin(), end(), out.begin()));
     return out;
   }
@@ -166,7 +169,7 @@ namespace types
   {
     return l * n;
   }
-#ifdef USE_BOOST_SIMD
+#ifdef USE_XSIMD
   template <class T, class S>
   template <class vectorizer>
   typename sliced_list<T, S>::simd_iterator
@@ -180,8 +183,8 @@ namespace types
   typename sliced_list<T, S>::simd_iterator
       sliced_list<T, S>::vend(vectorizer) const
   {
-    using vector_type = typename boost::simd::pack<dtype>;
-    static const std::size_t vector_size = vector_type::static_size;
+    using vector_type = typename xsimd::simd_type<dtype>;
+    static const std::size_t vector_size = vector_type::size;
     return {data->data() + slicing.lower +
             long(size() / vector_size * vector_size)};
   }
@@ -425,7 +428,7 @@ namespace types
   }
 
 // element access
-#ifdef USE_BOOST_SIMD
+#ifdef USE_XSIMD
   template <class T>
   template <class vectorizer>
   typename list<T>::simd_iterator list<T>::vbegin(vectorizer) const
@@ -437,8 +440,8 @@ namespace types
   template <class vectorizer>
   typename list<T>::simd_iterator list<T>::vend(vectorizer) const
   {
-    using vector_type = typename boost::simd::pack<dtype>;
-    static const std::size_t vector_size = vector_type::static_size;
+    using vector_type = typename xsimd::simd_type<dtype>;
+    static const std::size_t vector_size = vector_type::size;
     return {data->data() + long(size() / vector_size * vector_size)};
   }
 

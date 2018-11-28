@@ -8,6 +8,7 @@ from __future__ import print_function
 from pythran.analyses import LocalNodeDeclarations, GlobalDeclarations, Scope
 from pythran.analyses import YieldPoints, IsAssigned, ASTMatcher, AST_any
 from pythran.analyses import RangeValues, PureExpressions, Dependencies
+from pythran.analyses import Immediates
 from pythran.cxxgen import Template, Include, Namespace, CompilationUnit
 from pythran.cxxgen import Statement, Block, AnnotatedStatement, Typedef, Label
 from pythran.cxxgen import Value, FunctionDeclaration, EmptyStatement, Nop
@@ -202,6 +203,7 @@ class CxxFunction(Backend):
         self.types = parent.types
         self.pure_expressions = parent.pure_expressions
         self.global_declarations = parent.global_declarations
+        self.immediates = parent.immediates
 
     # local declaration processing
     def process_locals(self, node, node_visited, *skipped):
@@ -628,18 +630,22 @@ class CxxFunction(Backend):
             - order have to be known at compile time
         """
         assert isinstance(node.target, ast.Name)
-        pattern = ast.Call(func=ast.Attribute(
+        if sys.version_info.major == 3:
+            range_name = 'range'
+        else:
+            range_name = 'xrange'
+        pattern_range = ast.Call(func=ast.Attribute(
             value=ast.Name(id='__builtin__',
                            ctx=ast.Load(),
                            annotation=None),
-            attr=xrange.__name__, ctx=ast.Load()),
+            attr=range_name, ctx=ast.Load()),
             args=AST_any(), keywords=[])
         is_assigned = {node.target.id: False}
         [is_assigned.update(self.passmanager.gather(IsAssigned, stmt))
          for stmt in node.body]
 
-        if (node.iter not in ASTMatcher(pattern).search(node.iter) or
-                is_assigned[node.target.id]):
+        nodes = ASTMatcher(pattern_range).search(node.iter)
+        if (node.iter not in nodes or is_assigned[node.target.id]):
             return False
 
         args = node.iter.args
@@ -897,22 +903,25 @@ class CxxFunction(Backend):
 
     def visit_Num(self, node):
         if isinstance(node.n, complex):
-            return "{0}({1}, {2})".format(
+            ret = "{0}({1}, {2})".format(
                 PYTYPE_TO_CTYPE_TABLE[complex],
                 node.n.real,
                 node.n.imag)
-        elif isinstance(node.n, long):
-            return 'pythran_long({0})'.format(node.n)
         elif isnan(node.n):
-            return 'pythonic::numpy::nan'
+            ret = 'pythonic::numpy::nan'
         elif isinf(node.n):
-            return ('+' if node.n >= 0 else '-') + 'pythonic::numpy::inf'
+            ret = ('+' if node.n >= 0 else '-') + 'pythonic::numpy::inf'
         else:
-            return repr(node.n) + TYPE_TO_SUFFIX.get(type(node.n), "")
+            ret = repr(node.n) + TYPE_TO_SUFFIX.get(type(node.n), "")
+        if node in self.immediates:
+            assert isinstance(node.n, int)
+            return "std::integral_constant<%s, %s>{}" % (
+                PYTYPE_TO_CTYPE_TABLE[type(node.n)], node.n)
+        return ret
 
     def visit_Str(self, node):
         quoted = node.s.replace('"', '\\"').replace('\n', '\\n"\n"')
-        return '"' + quoted + '"'
+        return 'pythonic::types::str("' + quoted + '")'
 
     def visit_Attribute(self, node):
         obj, path = attr_to_path(node)
@@ -934,10 +943,9 @@ class CxxFunction(Backend):
             value = 'pythonic::types::str({})'.format(value)
         # positive static index case
         if (isinstance(node.slice, ast.Index) and
-            isinstance(node.slice.value, ast.Num) and
-            (node.slice.value.n >= 0) and
-            any(isinstance(node.slice.value.n, t)
-                for t in (int, long))):
+                isinstance(node.slice.value, ast.Num) and
+                (node.slice.value.n >= 0) and
+                isinstance(node.slice.value.n, int)):
             return "std::get<{0}>({1})".format(node.slice.value.n, value)
         # extended slice case
         elif isinstance(node.slice, ast.ExtSlice):
@@ -1229,7 +1237,7 @@ result_type;
       }  ;
       typename foo::type::result_type foo::operator()() const
       {
-        return "hello world";
+        return pythonic::types::str("hello world");
       }
     }
     """
@@ -1238,16 +1246,18 @@ result_type;
         """ Basic initialiser gathering analysis informations. """
         self.result = None
         super(Cxx, self).__init__(Dependencies, GlobalDeclarations, Types,
-                                  Scope, RangeValues, PureExpressions)
+                                  Scope, RangeValues, PureExpressions,
+                                  Immediates)
 
     # mod
     def visit_Module(self, node):
         """ Build a compilation unit. """
         # build all types
+        deps = sorted(self.dependencies)
         headers = [Include(os.path.join("pythonic", "include",  *t) + ".hpp")
-                   for t in self.dependencies]
+                   for t in deps]
         headers += [Include(os.path.join("pythonic", *t) + ".hpp")
-                    for t in self.dependencies]
+                    for t in deps]
 
         decls_n_defns = [self.visit(stmt) for stmt in node.body]
         decls, defns = zip(*[s for s in decls_n_defns if s])

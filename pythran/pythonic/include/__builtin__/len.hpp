@@ -15,8 +15,6 @@ namespace __builtin__
   template <class... Types>
   long len(std::tuple<Types...> const &);
 
-  constexpr long len(char);
-
   template <class T>
   typename std::enable_if<types::has_size<T>::value, long>::type
   len(T const &t);
@@ -25,7 +23,7 @@ namespace __builtin__
   typename std::enable_if<!types::has_size<T>::value, long>::type
   len(T const &t);
 
-  DECLARE_FUNCTOR(pythonic::__builtin__, len);
+  DEFINE_FUNCTOR(pythonic::__builtin__, len);
 }
 PYTHONIC_NS_END
 #endif

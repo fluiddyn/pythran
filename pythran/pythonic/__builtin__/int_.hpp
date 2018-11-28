@@ -26,13 +26,7 @@ namespace __builtin__
     template <class T>
     int_::type int_::operator()(T &&t) const
     {
-      return t;
-    }
-
-    int_::type int_::operator()(char t) const
-    {
-      assert(t >= '0' && t <= '9');
-      return t - '0';
+      return static_cast<int_::type>(t);
     }
 
     int_::type int_::operator()() const

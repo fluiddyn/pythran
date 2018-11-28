@@ -5,6 +5,8 @@
 
 #include "pythonic/utils/functor.hpp"
 
+#include <cstring>
+
 PYTHONIC_NS_BEGIN
 
 namespace operator_
@@ -15,7 +17,10 @@ namespace operator_
     return a > b;
   }
 
-  DEFINE_FUNCTOR(pythonic::operator_, gt);
+  bool gt(char const *self, char const *other)
+  {
+    return strcmp(self, other) > 0;
+  }
 }
 PYTHONIC_NS_END
 

@@ -4,12 +4,96 @@ This modules contains a distutils extension mechanism for Pythran
 '''
 
 import pythran.config as cfg
-import pythran.toolchain as tc
+
+from collections import defaultdict, Iterable
+import os.path
+import os
+import sys
+
+from distutils.command.build_ext import build_ext as LegacyBuildExt
 
 from numpy.distutils.extension import Extension
 
-import os.path
-import os
+
+class PythranBuildExt(LegacyBuildExt, object):
+    """Subclass of `distutils.command.build_ext.build_ext` which is required to
+    build `PythranExtension` with the configured C++ compiler. It may also be
+    subclassed if you want to combine with another build_ext class (NumPy,
+    Cython implementations).
+
+    """
+    def build_extension(self, ext):
+        StringTypes = (str, unicode) if sys.version_info[0] == 2 else (str,)
+
+        def get_value(obj, key):
+            var = getattr(obj, key)
+            if isinstance(var, Iterable) and not isinstance(var, StringTypes):
+                return var[0]
+            else:
+                return var
+
+        def set_value(obj, key, value):
+            var = getattr(obj, key)
+            if isinstance(var, Iterable) and not isinstance(var, StringTypes):
+                var[0] = value
+            else:
+                setattr(obj, key, value)
+
+        prev = {
+                # linux-like
+                'preprocessor': None,
+                'compiler_cxx': None,
+                'compiler_so': None,
+                'compiler': None,
+                'linker_exe': None,
+                'linker_so': None,
+                # Windows-like
+                'cc': None,
+                'linker': None,
+                'lib': None,
+                'rc': None,
+                'mc': None,
+        }
+        # Backup compiler settings
+        for key in list(prev.keys()):
+            if hasattr(self.compiler, key):
+                prev[key] = get_value(self.compiler, key)
+            else:
+                del prev[key]
+
+        # try hard to modify the compiler
+        if getattr(ext, 'cxx', None) is not None:
+            for comp in prev:
+                if hasattr(self.compiler, comp):
+                    set_value(self.compiler, comp, ext.cxx)
+
+        # In general, distutils uses -Wstrict-prototypes, but this option
+        # is not valid for C++ code, only for C.  Remove it if it's there
+        # to avoid a spurious warning on every compilation.
+        for flag in cfg.cfg.get('compiler', "ignoreflags").split():
+            for target in ('compiler_so', 'linker_so'):
+                try:
+                    getattr(self.compiler, target).remove(flag)
+                except (AttributeError, ValueError):
+                    pass
+
+        # Remove -arch i386 if 'x86_64' is specified, otherwise incorrect
+        # code is generated, at least on OSX
+        if hasattr(self.compiler, 'compiler_so'):
+            archs = defaultdict(list)
+            for i, flag in enumerate(self.compiler.compiler_so[1:]):
+                if self.compiler.compiler_so[i] == '-arch':
+                    archs[flag].append(i + 1)
+            if 'x86_64' in archs and 'i386' in archs:
+                for i in archs['i386']:
+                    self.compiler.compiler_so[i] = 'x86_64'
+
+        try:
+            return super(PythranBuildExt, self).build_extension(ext)
+        finally:
+            # Revert compiler settings
+            for key in prev.keys():
+                set_value(self.compiler, key, prev[key])
 
 
 class PythranExtension(Extension):
@@ -21,42 +105,37 @@ class PythranExtension(Extension):
 
     The compilation process ends up in a native Python module.
     '''
-    def __init__(self, name, sources, *args, **kwargs):
-        # the goal is to rely on original Extension
-        # to do so we convert the .py to .cpp with pythran
-        # and register the .cpp in place of the .py
-        # That's stage 0, and it's enough if you get the source
-        # from github and `python setup.py install it`
-        #
-        # *But* if you want to distribute the source through
-        # `python setup.py sdist` then the .py no longer exists
-        # and only the .cpp is distributed. That's stage 1
 
+    def __init__(self, name, sources, *args, **kwargs):
+        cfg_ext = cfg.make_extension(python=True, **kwargs)
+        self.cxx = cfg_ext.pop('cxx', None)
+        self._sources = sources
+        Extension.__init__(self, name, sources, *args, **cfg_ext)
+        self.__dict__.pop("sources", None)
+
+    @property
+    def sources(self):
+        import pythran.toolchain as tc
         cxx_sources = []
-        for source in sources:
-            base, _ = os.path.splitext(source)
+        for source in self._sources:
+            base, ext = os.path.splitext(source)
+            if ext != '.py':
+                cxx_sources.append(source)
+                continue
             output_file = base + '.cpp'  # target name
 
-            # stage 0 when we have the .py
-            if os.path.exists(source):
-                stage = 0
-            # stage 1 otherwise. `.cpp' should already be there
-            # as generated upon stage 0
-            else:
-                assert os.path.exists(output_file)
-                stage = 1
-                source = output_file
-
-            # stage-dependant processing
-            if stage == 0:
+            if os.path.exists(source) and (not os.path.exists(output_file)
+               or os.stat(output_file) < os.stat(source)):
                 # get the last name in the path
-                if '.' in name:
-                    module_name = os.path.splitext(name)[-1][1:]
+                if '.' in self.name:
+                    module_name = os.path.splitext(self.name)[-1][1:]
                 else:
-                    module_name = name
+                    module_name = self.name
                 tc.compile_pythranfile(source, output_file,
                                        module_name, cpponly=True)
             cxx_sources.append(output_file)
+        return cxx_sources
 
-        cfg_ext = cfg.make_extension(**kwargs)
-        Extension.__init__(self, name, cxx_sources, *args, **cfg_ext)
+    @sources.setter
+    def sources(self, sources):
+        self._sources = sources

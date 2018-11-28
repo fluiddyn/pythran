@@ -6,9 +6,37 @@ import numpy
 import unittest
 import sys
 
+try:
+    numpy.float128
+    has_float128 = True
+except AttributeError:
+    has_float128 = False
+
+
 
 @TestEnv.module
 class TestNdarray(TestEnv):
+
+    def test_ndarray_intc(self):
+        self.run_test('def ndarray_intc(a): import numpy as np; return np.intc(a), np.array([a, a], dtype=np.intc)',
+                      numpy.intc(5),
+                      ndarray_intc=[numpy.intc])
+
+    def test_ndarray_uintc(self):
+        self.run_test('def ndarray_uintc(a): import numpy as np; return np.uintc(a), np.array([a, a], dtype=np.uintc)',
+                      numpy.uintc(5),
+                      ndarray_uintc=[numpy.uintc])
+
+    def test_ndarray_intp(self):
+        self.run_test('def ndarray_intp(a): import numpy as np; return np.intp(a), np.array([a, a], dtype=np.intp)',
+                      numpy.intp(-5),
+                      ndarray_intp=[numpy.intp])
+
+    def test_ndarray_uintp(self):
+        self.run_test('def ndarray_uintp(a): import numpy as np; return np.uintp(a), np.array([a, a], dtype=np.uintp)',
+                      numpy.uintp(5),
+                      ndarray_uintp=[numpy.uintp])
+
     def test_ndarray_real_attr_read(self):
         self.run_test('def ndarray_real_attr_read(a): return a.real + 1',
                       numpy.arange(100, dtype=numpy.complex128).reshape((10, 10)),
@@ -387,6 +415,9 @@ def assign_ndarray(t):
 
     def test_iexpr1(self):
         self.run_test("def np_iexpr1(a,i): return a[i,0][0]", numpy.array(range(10*9*8)).reshape(10,9,8), 0, np_iexpr1=[NDArray[int, :,:,:], int])
+
+    def test_iexpr2(self):
+        self.run_test("def np_iexpr2(a,m): a[m==False] = 1; return a", numpy.arange(10).reshape(5,2), numpy.arange(10).reshape(5,2), np_iexpr2=[NDArray[int, :,:], NDArray[int, :,:]])
 
     def test_item0(self):
         self.run_test("def np_item0(a): return a.item(3)", numpy.array([[3, 1, 7],[2, 8, 3],[8, 5, 3]]), np_item0=[NDArray[int, :,: ]])
@@ -850,3 +881,78 @@ def assign_ndarray(t):
         self.run_test(code, 10, test_fexpr1=[int])
 
 
+    def test_vexpr0(self):
+        code = '''
+            import numpy as np
+            def vexpr0(a, b=None):
+                if b is None:
+                    assert len(a) > 0
+                    b = np.copy(a[0])
+                    a = a[1:]
+                else:
+                    b = np.copy(b)
+                m = b >= 0
+                for array in a:
+                    b[m] *= array[m]
+                return b'''
+        self.run_test(code,
+            [numpy.arange(10, dtype=numpy.int32).reshape(5,2)],
+            2 * numpy.arange(10, dtype=numpy.int32).reshape(5,2),
+            vexpr0=[List[NDArray[numpy.int32,:,:]], NDArray[numpy.int32,:,:]])
+
+    def test_array_of_pshape(self):
+        code = 'def array_of_pshape(x): from numpy import array; return array(x[None].shape)'
+        self.run_test(code, numpy.arange(10), array_of_pshape=[NDArray[int,:]])
+
+    def test_vexpr_of_texpr(self):
+        code = '''
+        import numpy as np
+        def apply_mask(mat, mask):
+            assert mask.shape == mat.shape
+            mat[mask == False] = np.nan
+            return mat
+
+        def vexpr_of_texpr(a, b):
+            return apply_mask(a.T, b), apply_mask(a, b.T), apply_mask(a.T, b.T)'''
+        self.run_test(code,
+                      numpy.arange(4., dtype=numpy.float32).reshape(2,2),
+                      numpy.array([[False,True],[True, False]]),
+                      vexpr_of_texpr=[NDArray[numpy.float32,:,:], NDArray[numpy.bool,:,:]])
+
+    def test_indexing_through_int8(self):
+        code = '''
+            def indexing_through_int8(x):
+                return x[x[0,0],x[0,1]]'''
+        self.run_test(code,
+                      numpy.arange(10, dtype=numpy.uint8).reshape(5,2),
+                      indexing_through_int8=[NDArray[numpy.uint8,:,:]])
+
+    def test_complex_scalar_broadcast(self):
+        self.run_test('def complex_scalar_broadcast(a): return (a**2 * (1 + a) + 2) / 5.',
+                      numpy.ones((10,10), dtype=complex),
+                      complex_scalar_broadcast=[NDArray[complex, :, :]])
+
+
+    @unittest.skipIf(not has_float128, "not float128")
+    def test_float128_0(self):
+        self.run_test('def float128_0(x): return x, x **2',
+                      numpy.float128(numpy.finfo(numpy.float64).max),
+                      float128_0=[numpy.float128])
+
+    @unittest.skipIf(not has_float128, "not float128")
+    def test_float128_1(self):
+        self.run_test('def float128_1(x): return x, x **2',
+                      numpy.ones((10,10), dtype=numpy.float128),
+                      float128_1=[NDArray[numpy.float128,:, :]])
+
+    @unittest.skipIf(not has_float128, "not float128")
+    def test_float128_2(self):
+        self.run_test('def float128_2(x): from numpy import ones, float128; return ones(x,dtype=float128)',
+                      3,
+                      float128_2=[int])
+
+    def test_texpr_expr_combined(self):
+        self.run_test("def texpr_expr_combined(x, y):\n if x: return y.T\n else: return y * 2",
+                      1,
+                      numpy.arange(10).reshape(5, 2),
+                      texpr_expr_combined=[int, NDArray[int,:,:]])

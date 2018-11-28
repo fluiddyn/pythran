@@ -5,9 +5,10 @@ a dynamic library, see __init__.py for exported interfaces.
 
 from pythran.backend import Cxx, Python
 from pythran.config import cfg, make_extension
-from pythran.cxxgen import PythonModule, Define, Include, Line, Statement
+from pythran.cxxgen import PythonModule, Include, Line, Statement
 from pythran.cxxgen import FunctionBody, FunctionDeclaration, Value, Block
 from pythran.cxxgen import ReturnStatement
+from pythran.dist import PythranExtension, PythranBuildExt
 from pythran.middlend import refine
 from pythran.passmanager import PassManager
 from pythran.tables import pythran_ward
@@ -17,15 +18,14 @@ from pythran.types.type_dependencies import pytype_to_deps
 from pythran.types.conversion import pytype_to_ctype
 from pythran.spec import load_specfile, Spec
 from pythran.spec import spec_to_string
-from pythran.syntax import check_specs
+from pythran.syntax import check_specs, check_exports
 from pythran.version import __version__
 import pythran.frontend as frontend
 
 from datetime import datetime
 from distutils.errors import CompileError
+from distutils import sysconfig
 from numpy.distutils.core import setup
-from numpy.distutils.extension import Extension
-import numpy.distutils.ccompiler
 
 from tempfile import mkdtemp, NamedTemporaryFile
 import gast as ast
@@ -35,39 +35,8 @@ import shutil
 import glob
 import hashlib
 from functools import reduce
-from collections import defaultdict
 
 logger = logging.getLogger('pythran')
-
-
-# hook taken from numpy.distutils.compiler
-# with useless steps  and warning removed
-def CCompiler_customize(self, _, need_cxx=0):
-    logger.info('customize %s', self.__class__.__name__)
-    numpy.distutils.ccompiler.customize_compiler(self)
-    if need_cxx:
-        # In general, distutils uses -Wstrict-prototypes, but this option is
-        # not valid for C++ code, only for C.  Remove it if it's there to
-        # avoid a spurious warning on every compilation.
-        try:
-            self.compiler_so.remove('-Wstrict-prototypes')
-        except (AttributeError, ValueError):
-            pass
-
-    if hasattr(self, 'compiler_so'):
-        # Remove -arch i386 if 'x86_64' is specified, otherwise incorrect code
-        # is generated, at least on OSX
-        archs = defaultdict(list)
-        for i, flag in enumerate(self.compiler_so[1:]):
-            if self.compiler_so[i] == '-arch':
-                archs[flag].append(i + 1)
-        if 'x86_64' in archs and 'i386' in archs:
-            for i in archs['i386']:
-                self.compiler_so[i] = 'x86_64'
-
-
-numpy.distutils.ccompiler.replace_method(numpy.distutils.ccompiler.CCompiler,
-                                         'customize', CCompiler_customize)
 
 
 def _extract_all_constructed_types(v):
@@ -202,6 +171,7 @@ def generate_cxx(module_name, code, specs=None, optimizations=None,
             check_specs(ir, specs, renamings, types)
 
         specs.to_docstrings(docstrings)
+        check_exports(ir, specs, renamings)
 
         if isinstance(code, bytes):
             code_bytes = code
@@ -212,7 +182,6 @@ def generate_cxx(module_name, code, specs=None, optimizations=None,
                     'date': datetime.now()}
 
         mod = PythonModule(module_name, docstrings, metainfo)
-        mod.add_to_preamble(Define("BOOST_SIMD_NO_STRICT_ALIASING", "1"))
         mod.add_to_includes(
             Include("pythonic/core.hpp"),
             Include("pythonic/python/core.hpp"),
@@ -325,16 +294,16 @@ def compile_cxxfile(module_name, cxxfile, output_binary=None, **kwargs):
     builddir = mkdtemp()
     buildtmp = mkdtemp()
 
-    extension_args = make_extension(**kwargs)
+    extension_args = make_extension(python=True, **kwargs)
 
-    extension = Extension(module_name,
-                          [cxxfile],
-                          language="c++",
-                          **extension_args)
+    extension = PythranExtension(module_name,
+                                 [cxxfile],
+                                 **extension_args)
 
     try:
         setup(name=module_name,
               ext_modules=[extension],
+              cmdclass={"build_ext": PythranBuildExt},
               # fake CLI call
               script_name='setup.py',
               script_args=['--verbose'
@@ -347,11 +316,25 @@ def compile_cxxfile(module_name, cxxfile, output_binary=None, **kwargs):
     except SystemExit as e:
         raise CompileError(str(e))
 
-    target, = glob.glob(os.path.join(builddir, module_name + "*"))
-    if not output_binary:
-        output_binary = os.path.join(os.getcwd(),
-                                     module_name + os.path.splitext(target)[1])
-    shutil.move(target, output_binary)
+    def copy(src_file, dest_file):
+        # not using shutil.copy because it fails to copy stat across devices
+        with open(src_file, 'rb') as src:
+            with open(dest_file, 'wb') as dest:
+                dest.write(src.read())
+
+    ext = sysconfig.get_config_var('SO')
+    # Copy all generated files including the module name prefix (.pdb, ...)
+    for f in glob.glob(os.path.join(builddir, module_name + "*")):
+        if f.endswith(ext):
+            if not output_binary:
+                output_binary = os.path.join(os.getcwd(), module_name + ext)
+            copy(f, output_binary)
+        else:
+            if not output_binary:
+                output_directory = os.getcwd()
+            else:
+                output_directory = os.path.dirname(output_binary)
+            copy(f, os.path.join(output_directory, os.path.basename(f)))
     shutil.rmtree(builddir)
     shutil.rmtree(buildtmp)
 
@@ -487,7 +470,6 @@ def test_compile():
 
     '''
     code = '''
-        #define BOOST_PYTHON_MAX_ARITY 4
         #include <pythonic/core.hpp>
     '''
 

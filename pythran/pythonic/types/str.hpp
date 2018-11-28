@@ -3,7 +3,6 @@
 
 #include "pythonic/include/types/str.hpp"
 
-#include "pythonic/types/long.hpp"
 #include "pythonic/types/tuple.hpp"
 
 #include "pythonic/types/assignable.hpp"
@@ -53,9 +52,9 @@ namespace types
     return data != other.data;
   }
 
-  char const_sliced_str_iterator::operator*() const
+  str const_sliced_str_iterator::operator*() const
   {
-    return *data;
+    return str(*data);
   }
 
   const_sliced_str_iterator const_sliced_str_iterator::operator-(long n) const
@@ -136,28 +135,13 @@ namespace types
 
   // accessor
   template <class S>
-  char sliced_str<S>::fast(long i) const
+  str sliced_str<S>::fast(long i) const
   {
-    return (*data)[slicing.get(i)];
+    return str((*data)[slicing.get(i)]);
   }
 
   template <class S>
-  char &sliced_str<S>::fast(long i)
-  {
-    return (*data)[slicing.get(i)];
-  }
-
-  template <class S>
-  char sliced_str<S>::operator[](long i) const
-  {
-    if (i < 0) {
-      i += size();
-    }
-    return fast(i);
-  }
-
-  template <class S>
-  char &sliced_str<S>::operator[](long i)
+  str sliced_str<S>::operator[](long i) const
   {
     if (i < 0) {
       i += size();
@@ -265,6 +249,12 @@ namespace types
   {
   }
 
+  template <size_t N>
+  str::str(const char(&s)[N])
+      : data(s)
+  {
+  }
+
   str::str(const char *s, size_t n) : data(s, n)
   {
   }
@@ -275,14 +265,25 @@ namespace types
 
   template <class S>
   str::str(sliced_str<S> const &other)
-      : data(other.begin(), other.end())
+      : data(other.size(), 0)
   {
+    auto iter = chars().begin();
+    for (auto &&s : other)
+      *iter++ = s.chars()[0];
   }
 
   template <class T>
   str::str(T const &begin, T const &end)
       : data(begin, end)
   {
+  }
+
+  template <class T>
+  str::str(T const &s)
+  {
+    std::ostringstream oss;
+    oss << s;
+    *data = oss.str();
   }
 
   str::operator char() const
@@ -304,21 +305,17 @@ namespace types
     return res;
   }
 
-  str::operator pythran_long_t() const
+  str::operator float() const
   {
-#ifdef USE_GMP
-    return pythran_long_t(*data);
-#else
     char *endptr;
     auto dat = data->data();
-    pythran_long_t res = strtoll(dat, &endptr, 10);
+    float res = strtof(dat, &endptr);
     if (endptr == dat) {
       std::ostringstream err;
-      err << "invalid literal for long() with base 10:'" << c_str() << '\'';
+      err << "invalid literal for float():'" << c_str() << "'";
       throw std::runtime_error(err.str());
     }
     return res;
-#endif
   }
 
   str::operator double() const
@@ -361,44 +358,24 @@ namespace types
     return data->size();
   }
 
-  auto str::begin() const -> decltype(data->begin())
+  typename str::iterator str::begin() const
   {
-    return data->begin();
+    return {data->begin()};
   }
 
-  auto str::begin() -> decltype(data->begin())
+  typename str::reverse_iterator str::rbegin() const
   {
-    return data->begin();
+    return {data->rbegin()};
   }
 
-  auto str::rbegin() const -> decltype(data->rbegin())
+  typename str::iterator str::end() const
   {
-    return data->rbegin();
+    return {data->end()};
   }
 
-  auto str::rbegin() -> decltype(data->rbegin())
+  typename str::reverse_iterator str::rend() const
   {
-    return data->rbegin();
-  }
-
-  auto str::end() const -> decltype(data->end())
-  {
-    return data->end();
-  }
-
-  auto str::end() -> decltype(data->end())
-  {
-    return data->end();
-  }
-
-  auto str::rend() const -> decltype(data->rend())
-  {
-    return data->rend();
-  }
-
-  auto str::rend() -> decltype(data->rend())
-  {
-    return data->rend();
+    return {data->rend()};
   }
 
   auto str::c_str() const -> decltype(data->c_str())
@@ -513,7 +490,7 @@ namespace types
       return false;
     for (long i = other.get_slice().lower, j = 0L; j < size();
          i = i + other.get_slice().step, j++)
-      if (other.get_data()[i] != (*this)[j])
+      if (other.get_data()[i] != chars()[j])
         return false;
     return true;
   }
@@ -528,28 +505,16 @@ namespace types
     return operator[](s);
   }
 
-  char str::operator[](long i) const
+  str str::operator[](long i) const
   {
     if (i < 0)
       i += size();
-    return fast(i);
+    return str(fast(i));
   }
 
-  char &str::operator[](long i)
+  str str::fast(long i) const
   {
-    if (i < 0)
-      i += size();
-    return fast(i);
-  }
-
-  char str::fast(long i) const
-  {
-    return (*data)[i];
-  }
-
-  char &str::fast(long i)
-  {
-    return (*data)[i];
+    return str((*data)[i]);
   }
 
   sliced_str<slice> str::operator[](slice const &s) const
@@ -561,27 +526,6 @@ namespace types
   {
     return sliced_str<contiguous_slice>(*this, s.normalize(size()));
   }
-
-#ifdef USE_GMP
-  char str::fast(pythran_long_t const &m) const
-  {
-    return (*this)[m.get_si()];
-  }
-
-  char &str::fast(pythran_long_t const &m)
-  {
-    return (*this)[m.get_si()];
-  }
-  char str::operator[](pythran_long_t const &m) const
-  {
-    return this->fast(m.get_si());
-  }
-
-  char &str::operator[](pythran_long_t const &m)
-  {
-    return this->fast(m.get_si());
-  }
-#endif
 
   str::operator bool() const
   {
@@ -625,34 +569,15 @@ namespace types
     return {std::move(s)};
   }
 
-  bool operator==(char c, str const &s)
+  template <size_t N>
+  bool operator==(char const(&self)[N], str const &other)
   {
-    return s.size() == 1 && s[0] == c;
-  }
-
-  bool operator==(str const &s, char c)
-  {
-    return s.size() == 1 && s[0] == c;
-  }
-
-  bool operator!=(char c, str const &s)
-  {
-    return s.size() != 1 || s[0] != c;
-  }
-
-  bool operator!=(str const &s, char c)
-  {
-    return s.size() != 1 || s[0] != c;
+    return other == self;
   }
 
   std::ostream &operator<<(std::ostream &os, str const &s)
   {
     return os << s.c_str();
-  }
-
-  size_t hash_value(str const &x)
-  {
-    return std::hash<str>()(x);
   }
 }
 
@@ -665,6 +590,23 @@ namespace operator_
   {
     return types::str(fmt) % std::forward<Arg>(arg);
   }
+
+  pythonic::types::str add(char const *self, char const *other)
+  {
+    pythonic::types::str res{self};
+    res += other;
+    return res;
+  }
+
+  pythonic::types::str mul(long self, char const *other)
+  {
+    return pythonic::types::str{other} * self;
+  }
+
+  pythonic::types::str mul(char const *self, long other)
+  {
+    return pythonic::types::str{self} * other;
+  }
 }
 PYTHONIC_NS_END
 
@@ -674,9 +616,9 @@ pythonic::types::str operator*(pythonic::types::str const &s, long n)
     return pythonic::types::str();
   pythonic::types::str other;
   other.resize(s.size() * n);
-  auto where = other.begin();
+  auto where = other.chars().begin();
   for (long i = 0; i < n; i++, where += s.size())
-    std::copy(s.begin(), s.end(), where);
+    std::copy(s.chars().begin(), s.chars().end(), where);
   return other;
 }
 
@@ -729,10 +671,6 @@ PyObject *
 to_python<types::sliced_str<S>>::convert(types::sliced_str<S> const &v)
 {
   return ::to_python(types::str(v));
-}
-PyObject *to_python<char>::convert(char l)
-{
-  return PyString_FromStringAndSize(&l, 1);
 }
 
 bool from_python<types::str>::is_convertible(PyObject *obj)

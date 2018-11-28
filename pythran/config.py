@@ -27,11 +27,6 @@ def init_cfg(sys_file, platform_file, user_file):
         cfgp.readfp(open(required))
     cfgp.read([user_config_path])
 
-    for key in ('CC', 'CXX'):
-        value = cfgp.get('compiler', key)
-        if value:
-            os.environ[key] = str(value)
-
     for obsolete_section in ('user', 'sys'):
         if cfgp.has_section(obsolete_section):
             logger.warn("Your pythranrc has an obsolete `%s' section",
@@ -40,14 +35,17 @@ def init_cfg(sys_file, platform_file, user_file):
     return cfgp
 
 
-def make_extension(**extra):
+def make_extension(python, **extra):
+
     def parse_define(define):
         index = define.find('=')
         if index < 0:
             return (define, None)
         else:
             return define[:index], define[index + 1:]
+
     extension = {
+        "language": "c++",
         # forcing str conversion to handle Unicode case (the default on MS)
         "define_macros": [str(x) for x in
                           cfg.get('compiler', 'defines').split()],
@@ -65,31 +63,41 @@ def make_extension(**extra):
                             cfg.get('compiler', 'ldflags').split()],
     }
 
-    extension['define_macros'].append('ENABLE_PYTHON_MODULE')
+    if python:
+        extension['define_macros'].append('ENABLE_PYTHON_MODULE')
     extension['define_macros'].append(
         '__PYTHRAN__={}'.format(sys.version_info.major))
 
     here = os.path.dirname(os.path.dirname(__file__)) or '.'
     # using / as separator as advised in the distutils doc
     extension["include_dirs"].append(here + '/pythran')
+
+    extra.pop('language', None)  # forced to c++ anyway
+    cxx = extra.pop('cxx', None)
+    if cxx is None:
+        cxx = compiler()
+    if cxx is not None:
+        extension['cxx'] = cxx
+
     for k, w in extra.items():
         extension[k].extend(w)
     if cfg.getboolean('pythran', 'complex_hook'):
         # the patch is *not* portable
         extension["include_dirs"].append(here + '/pythran/pythonic/patch')
 
-    # Numpy can poluate the stdout with warning message which should be on stderr
+    # Numpy can pollute stdout with warning message which should be on stderr
     old_stdout = sys.stdout
     try:
         sys.stdout = sys.stderr
 
         # numpy specific
-        extension['include_dirs'].append(numpy.get_include())
+        if python:
+            extension['include_dirs'].append(numpy.get_include())
 
         # blas dependency
         user_blas = cfg.get('compiler', 'blas')
         numpy_blas = numpy_sys.get_info(user_blas)
-        # required to cope with atlas missing ectern "C"
+        # required to cope with atlas missing extern "C"
         extension['define_macros'].append('PYTHRAN_BLAS_{}'
                                           .format(user_blas.upper()))
         extension['libraries'].extend(numpy_blas.get('libraries', []))
@@ -99,21 +107,26 @@ def make_extension(**extra):
         sys.stdout = old_stdout
 
     # final macro normalization
-    extension["define_macros"] = [parse_define(dm) for dm in
-                                  extension["define_macros"]]
+    extension["define_macros"] = [
+        dm if isinstance(dm, tuple) else parse_define(dm)
+        for dm in extension["define_macros"]]
     return extension
 
 
 def compiler():
-    """Get compiler to use for C++ to binary process."""
-    return os.environ.get('CXX', 'c++')
+    """Get compiler to use for C++ to binary process. The precedence for
+    choosing the compiler is as follows::
 
+      1. `CXX` environment variable
+      2. User configuration (~/.pythranrc)
 
-def have_gmp_support(**extra):
-    """Check if the USE_GMP macro is defined."""
-    return (sys.version_info.major != 3 and
-            any("USE_GMP" == name
-                for name, _ in make_extension(**extra)["define_macros"]))
+    Returns None if none is set or if it's set to the empty string
+
+    """
+    cfg_cxx = str(cfg.get('compiler', 'CXX'))
+    if not cfg_cxx:
+        cfg_cxx = None
+    return os.environ.get('CXX', cfg_cxx) or None
 
 
 # load platform specific configuration then user configuration
@@ -146,14 +159,19 @@ def run():
     parser.add_argument('--libs', action='store_true',
                         help='print linker flags')
 
+    parser.add_argument('--no-python', action='store_true',
+                        help='do not include Python-related flags')
+
     args = parser.parse_args(sys.argv[1:])
+
+    args.python = not args.no_python
 
     output = []
 
-    extension = pythran.config.make_extension()
+    extension = pythran.config.make_extension(python=args.python)
 
     if args.compiler:
-        output.append(os.environ.get('CXX', 'c++'))
+        output.append(compiler() or 'c++')
 
     if args.cflags:
         def fmt_define(define):
@@ -166,18 +184,21 @@ def run():
                       for define in extension['define_macros'])
         output.extend(('-I' + include)
                       for include in extension['include_dirs'])
-        output.append('-I' + numpy.get_include())
-        output.append('-I' + distutils.sysconfig.get_python_inc())
+        if args.python:
+            output.append('-I' + numpy.get_include())
+            output.append('-I' + distutils.sysconfig.get_python_inc())
 
     if args.libs:
         output.extend(('-L' + include)
                       for include in extension['library_dirs'])
-        output.append('-L' + distutils.sysconfig.get_config_var('LIBPL'))
         output.extend(('-l' + include)
                       for include in extension['libraries'])
-        output.extend(distutils.sysconfig.get_config_var('LIBS').split())
-        output.append('-lpython' +
-                      distutils.sysconfig.get_config_var('VERSION'))
+
+        if args.python:
+            output.append('-L' + distutils.sysconfig.get_config_var('LIBPL'))
+            output.extend(distutils.sysconfig.get_config_var('LIBS').split())
+            output.append('-lpython' +
+                          distutils.sysconfig.get_config_var('VERSION'))
 
     if output:
         print(' '.join(output))

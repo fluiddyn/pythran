@@ -41,6 +41,12 @@ class Dependencies(ModuleAnalysis):
         self.result.add(('__builtin__', 'pow'))
         self.result.add(('operator_', 'ipow'))
 
+    def visit_Add(self, node):
+        self.result.add(('operator_', 'add'))
+
+    def visit_Mult(self, node):
+        self.result.add(('operator_', 'mul'))
+
     def visit_MatMult(self, node):
         self.result.add(('operator_', 'matmul'))
         self.result.add(('operator_', 'imatmul'))
@@ -50,6 +56,18 @@ class Dependencies(ModuleAnalysis):
 
     def visit_NotEq(self, node):
         self.result.add(('operator_', 'ne'))
+
+    def visit_Lt(self, node):
+        self.result.add(('operator_', 'lt'))
+
+    def visit_LtE(self, node):
+        self.result.add(('operator_', 'le'))
+
+    def visit_Gt(self, node):
+        self.result.add(('operator_', 'gt'))
+
+    def visit_GtE(self, node):
+        self.result.add(('operator_', 'ge'))
 
     def visit_In(self, node):
         self.result.add(('__builtin__', 'in'))
@@ -61,6 +79,9 @@ class Dependencies(ModuleAnalysis):
         self.generic_visit(node)
 
     visit_IsNot = visit_Is
+
+    def visit_Add(self, node):
+        self.result.add(('operator_', 'add'))
 
     def visit_IfExp(self, node):
         self.result.add(('__builtin__', 'pythran', 'ifexp'))
@@ -101,8 +122,6 @@ class Dependencies(ModuleAnalysis):
     def visit_Num(self, node):
         if isinstance(node.n, complex):
             self.result.add(('types', 'complex'))
-        elif isinstance(node.n, long):
-            self.result.add(('types', 'long'))
         elif math.isnan(node.n):
             self.result.add(('numpy', 'nan'))
         elif math.isinf(node.n):

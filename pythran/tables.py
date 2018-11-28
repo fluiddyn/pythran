@@ -21,11 +21,7 @@ from functools import reduce
 
 if sys.version_info.major == 3:
     sys.modules['__builtin__'] = sys.modules['builtins']
-    sys.modules['__builtin__'].xrange = sys.modules['builtins'].range
 
-    class long(int):
-        pass
-    sys.modules['__builtin__'].long = long
     import functools
     sys.modules['__builtin__'].reduce = functools.reduce
     getargspec = inspect.getfullargspec
@@ -79,9 +75,9 @@ operator_to_lambda = {
     ast.And: make_and,
     ast.Or: make_or,
     # operator
-    ast.Add: "({0} + {1})".format,
+    ast.Add: "(pythonic::operator_::add({0}, {1}))".format,
     ast.Sub: "({0} - {1})".format,
-    ast.Mult: "({0} * {1})".format,
+    ast.Mult: "(pythonic::operator_::mul({0}, {1}))".format,
     ast.Div: "(pythonic::operator_::div({0}, {1}))".format,
     ast.Mod: "(pythonic::operator_::mod({0}, {1}))".format,
     ast.Pow: "(pythonic::__builtin__::pow({0}, {1}))".format,
@@ -102,10 +98,10 @@ operator_to_lambda = {
     # cmpop
     ast.Eq: "(pythonic::operator_::eq({0}, {1}))".format,
     ast.NotEq: "(pythonic::operator_::ne({0}, {1}))".format,
-    ast.Lt: "({0} < {1})".format,
-    ast.LtE: "({0} <= {1})".format,
-    ast.Gt: "({0} > {1})".format,
-    ast.GtE: "({0} >= {1})".format,
+    ast.Lt: "(pythonic::operator_::lt({0}, {1}))".format,
+    ast.LtE: "(pythonic::operator_::le({0}, {1}))".format,
+    ast.Gt: "(pythonic::operator_::gt({0}, {1}))".format,
+    ast.GtE: "(pythonic::operator_::ge({0}, {1}))".format,
     ast.Is: ("(pythonic::__builtin__::id({0}) == "
              "pythonic::__builtin__::id({1}))").format,
     ast.IsNot: ("(pythonic::__builtin__::id({0}) != "
@@ -203,6 +199,11 @@ CLASSES = {
         "count": ConstMethodIntr(signature=Fun[[List[T0], T0], int]),
         "remove": MethodIntr(signature=Fun[[List[T0], T0], None]),
         "insert": MethodIntr(signature=Fun[[List[T0], int, T0], None]),
+    },
+    "slice": {
+        "start": AttributeIntr(signature=Fun[[T0], int]),
+        "stop": AttributeIntr(signature=Fun[[T0], int]),
+        "step": AttributeIntr(signature=Fun[[T0], int]),
     },
     "str": {
         "__mod__": ConstMethodIntr(
@@ -2570,7 +2571,13 @@ _numpy_array_signature = Union[
 MODULES = {
     "__builtin__": {
         "pythran": {
-            "len_set": ConstFunctionIntr(signature=Fun[[Iterable[T0]], int])
+            "abssqr": ConstFunctionIntr(),
+            "is_none": ConstFunctionIntr(),
+            "len_set": ConstFunctionIntr(signature=Fun[[Iterable[T0]], int]),
+            "make_shape": ConstFunctionIntr(),
+            "static_if_": ConstFunctionIntr(),
+            "StaticIfReturn": ConstFunctionIntr(),
+            "StaticIfNoReturn": ConstFunctionIntr()
         },
         "abs": ConstFunctionIntr(
             signature=Union[
@@ -2708,15 +2715,6 @@ MODULES = {
                 Fun[[Iterable[T0]], List[T0]]
             ],
         ),
-        "long_": ConstFunctionIntr(
-            signature=Union[
-                Fun[[], int],
-                Fun[[bool], int],
-                Fun[[int], int],
-                Fun[[float], int],
-                Fun[[str], int],
-            ]
-        ),
         "map": ReadOnceFunctionIntr(
             signature=Union[
                 Fun[[None, Iterable[T0]], List[T0]],
@@ -2804,6 +2802,7 @@ MODULES = {
                 Fun[[Iterable[T0]], Set[T0]]
             ],
         ),
+        "slice": ClassWithConstConstructor(CLASSES['slice']),
         "sorted": ConstFunctionIntr(signature=Fun[[Iterable[T0]], List[T0]]),
         "str": ClassWithConstConstructor(
             CLASSES['str'],
@@ -2863,6 +2862,46 @@ MODULES = {
             ),
             "gamma": ConstFunctionIntr(
                 signature=_numpy_unary_op_float_signature
+            ),
+            "hankel1": UFunc(
+                BINARY_UFUNC,
+                signature=_numpy_binary_op_float_signature
+            ),
+            "hankel2": UFunc(
+                BINARY_UFUNC,
+                signature=_numpy_binary_op_float_signature
+            ),
+            "iv": UFunc(
+                BINARY_UFUNC,
+                signature=_numpy_binary_op_float_signature
+            ),
+            "ivp": UFunc(
+                BINARY_UFUNC,
+                signature=_numpy_binary_op_float_signature
+            ),
+            "jv": UFunc(
+                BINARY_UFUNC,
+                signature=_numpy_binary_op_float_signature
+            ),
+            "jvp": UFunc(
+                BINARY_UFUNC,
+                signature=_numpy_binary_op_float_signature
+            ),
+            "kv": UFunc(
+                BINARY_UFUNC,
+                signature=_numpy_binary_op_float_signature
+            ),
+            "kvp": UFunc(
+                BINARY_UFUNC,
+                signature=_numpy_binary_op_float_signature
+            ),
+            "yv": UFunc(
+                BINARY_UFUNC,
+                signature=_numpy_binary_op_float_signature
+            ),
+            "yvp": UFunc(
+                BINARY_UFUNC,
+                signature=_numpy_binary_op_float_signature
             ),
         }
     },
@@ -3137,12 +3176,21 @@ MODULES = {
         "arctanh": ConstFunctionIntr(
             signature=_numpy_unary_op_float_signature),
         "argmax": ConstMethodIntr(
-            signature=_numpy_unary_op_int_axis_signature),
+            signature=_numpy_unary_op_int_axis_signature,
+            return_range=interval.positive_values
+        ),
         "argmin": ConstMethodIntr(
-            signature=_numpy_unary_op_int_axis_signature),
+            signature=_numpy_unary_op_int_axis_signature,
+            return_range=interval.positive_values
+        ),
         "argsort": ConstFunctionIntr(
-            signature=_numpy_unary_op_int_axis_signature),
-        "argwhere": ConstFunctionIntr(signature=_numpy_unary_op_int_signature),
+            signature=_numpy_unary_op_int_axis_signature,
+            return_range=interval.positive_values
+        ),
+        "argwhere": ConstFunctionIntr(
+            signature=_numpy_unary_op_int_signature,
+            return_range=interval.positive_values
+        ),
         "around": ConstFunctionIntr(signature=_numpy_around_signature),
         "array": ConstFunctionIntr(signature=_numpy_array_signature,
                                    args=('object', 'dtype'), defaults=(None,)),
@@ -3520,6 +3568,7 @@ MODULES = {
         "complex": ConstFunctionIntr(signature=_complex_signature),
         "complex64": ConstFunctionIntr(signature=_complex_signature),
         "complex128": ConstFunctionIntr(signature=_complex_signature),
+        "complex256": ConstFunctionIntr(signature=_complex_signature),
         "conj": ConstMethodIntr(signature=_numpy_unary_op_signature),
         "conjugate": ConstMethodIntr(signature=_numpy_unary_op_signature),
         "copy": ConstMethodIntr(signature=_numpy_array_signature),
@@ -3579,9 +3628,7 @@ MODULES = {
                      Iterable[Iterable[Iterable[complex]]]], None],
             ]
         ),
-        "copysign": ConstFunctionIntr(
-            signature=_numpy_binary_op_float_signature
-        ),
+        "copysign": UFunc(BINARY_UFUNC),
         "count_nonzero": ConstFunctionIntr(
             signature=Union[
                 # scalar
@@ -3677,6 +3724,7 @@ MODULES = {
         "flipud": ConstFunctionIntr(),
         "float32": ConstFunctionIntr(signature=_float_signature),
         "float64": ConstFunctionIntr(signature=_float_signature),
+        "float128": ConstFunctionIntr(signature=_float_signature),
         "float_": ConstFunctionIntr(signature=_float_signature),
         "floor": ConstFunctionIntr(signature=_numpy_float_unary_op_signature),
         "floor_divide": UFunc(BINARY_UFUNC),
@@ -3709,6 +3757,7 @@ MODULES = {
         "int32": ConstFunctionIntr(signature=_int_signature),
         "int64": ConstFunctionIntr(signature=_int_signature),
         "int8": ConstFunctionIntr(signature=_int_signature),
+        "intc": ConstFunctionIntr(signature=_int_signature),
         "intp": ConstFunctionIntr(signature=_int_signature),
         "invert": ConstFunctionIntr(),
         "isclose": ConstFunctionIntr(),
@@ -3912,11 +3961,13 @@ MODULES = {
         "uint16": ConstFunctionIntr(signature=_int_signature),
         "uint32": ConstFunctionIntr(signature=_int_signature),
         "uint64": ConstFunctionIntr(signature=_int_signature),
+        "uintc": ConstFunctionIntr(signature=_int_signature),
         "uintp": ConstFunctionIntr(signature=_int_signature),
         "uint8": ConstFunctionIntr(signature=_int_signature),
         "union1d": ConstFunctionIntr(),
         "unique": ConstFunctionIntr(),
         "unwrap": ConstFunctionIntr(),
+        "unravel_index": ConstFunctionIntr(),
         "var": ConstMethodIntr(),
         "vstack": ConstFunctionIntr(),
         "where": ConstFunctionIntr(),
@@ -4243,16 +4294,6 @@ MODULES = {
         "test_nest_lock": FunctionIntr(global_effects=True),
         "get_wtime": FunctionIntr(global_effects=True),
         "get_wtick": FunctionIntr(global_effects=True),
-        "set_schedule": FunctionIntr(global_effects=True),
-        "get_schedule": FunctionIntr(global_effects=True),
-        "get_thread_limit": FunctionIntr(global_effects=True),
-        "set_max_active_levels": FunctionIntr(global_effects=True),
-        "get_max_active_levels": FunctionIntr(global_effects=True),
-        "get_level": FunctionIntr(global_effects=True),
-        "get_ancestor_thread_num": FunctionIntr(global_effects=True),
-        "get_team_size": FunctionIntr(global_effects=True),
-        "get_active_level": FunctionIntr(global_effects=True),
-        "in_final": FunctionIntr(global_effects=True),
     },
     "operator_": {
         "lt": ConstFunctionIntr(signature=_operator_eq_signature),
@@ -4428,7 +4469,7 @@ if sys.version_info.major == 3:
     del MODULES['operator_']['__div__']
     del MODULES['__builtin__']['cmp']
     del MODULES['__builtin__']['file']
-    del MODULES['__builtin__']['long_']
+    del MODULES['__builtin__']['xrange']
     del MODULES['__builtin__']['StandardError']
     MODULES['io'] = {
         '_io': {
@@ -4443,6 +4484,27 @@ else:
     del MODULES['operator_']['matmul']
     del MODULES['operator_']['__matmul__']
 
+# OMP version
+try:
+    import omp
+    omp_version = omp.VERSION
+except (ImportError, AttributeError):
+    omp_version = 45  # Fallback on last version
+
+if omp_version >= 30:
+    MODULES['omp'].update({
+        "set_schedule": FunctionIntr(global_effects=True),
+        "get_schedule": FunctionIntr(global_effects=True),
+        "get_thread_limit": FunctionIntr(global_effects=True),
+        "set_max_active_levels": FunctionIntr(global_effects=True),
+        "get_max_active_levels": FunctionIntr(global_effects=True),
+        "get_level": FunctionIntr(global_effects=True),
+        "get_ancestor_thread_num": FunctionIntr(global_effects=True),
+        "get_team_size": FunctionIntr(global_effects=True),
+        "get_active_level": FunctionIntr(global_effects=True),
+        "in_final": FunctionIntr(global_effects=True),
+    })
+
 # VMSError is only available on VMS
 if 'VMSError' in sys.modules['__builtin__'].__dict__:
     MODULES['__builtin__']['VMSError'] = ConstExceptionIntr()
@@ -4456,7 +4518,7 @@ for module_name in ["omp", "scipy.special", "scipy"]:
     try:
         __import__(module_name)
     except ImportError:
-        logger.warn(
+        logger.info(
             "Pythran support disabled for module: {}".format(module_name)
         )
         parts = module_name.split(".")

@@ -3,7 +3,7 @@
 import unittest
 
 import numpy
-from pythran.typing import List, NDArray
+from pythran.typing import List, NDArray, Tuple
 
 from test_env import TestEnv
 
@@ -228,6 +228,21 @@ class TestNumpyFunc3(TestEnv):
     def test_diff4(self):
         self.run_test("def np_diff4(x): from numpy import diff; return diff(x + x)", numpy.array([1, 2, 4, 7, 0]), np_diff4=[NDArray[int,:]])
 
+    def test_diff5(self):
+        self.run_test("def np_diff5(x): from numpy import diff; return diff(x + x, 2, axis=0)", numpy.arange(100).reshape(10, 10)*2, np_diff5=[NDArray[int,:,:]])
+
+    def test_diff6(self):
+        self.run_test("def np_diff6(x): from numpy import diff; return diff(x, axis=0)", numpy.arange(100).reshape(10, 10)*2, np_diff6=[NDArray[int,:,:]])
+
+    def test_diff7(self):
+        self.run_test("def np_diff7(x): from numpy import diff; return diff(x, axis=0)", numpy.arange(300).reshape(3, 10, 10)*2, np_diff7=[NDArray[int,:,:,:]])
+
+    def test_diff8(self):
+        self.run_test("def np_diff8(x): from numpy import diff; return diff(x, axis=1)", numpy.arange(300).reshape(3, 10, 10)*2, np_diff8=[NDArray[int,:,:,:]])
+
+    def test_diff9(self):
+        self.run_test("def np_diff9(x): from numpy import diff; return diff(x, axis=2)", numpy.arange(300).reshape(3, 10, 10)*2, np_diff9=[NDArray[int,:,:,:]])
+
     def test_trace0(self):
         self.run_test("def np_trace0(x): return x.trace()", numpy.arange(9).reshape(3,3), np_trace0=[NDArray[int,:,:]])
 
@@ -311,6 +326,12 @@ def np_trim_zeros2(x):
 
     def test_unwrap2(self):
         self.run_test("def np_unwrap2(x): from numpy import unwrap, pi ; x[:3] -= 2*pi; return unwrap(x, 4)", numpy.arange(6, dtype=float), np_unwrap2=[NDArray[float,:]])
+
+    def test_unravel_index_0(self):
+        self.run_test("def np_unravel_index0(x, y): from numpy import unravel_index; return unravel_index(x, y)", 1621, (6, 7, 8, 9), np_unravel_index0=[int, Tuple[int, int, int, int]])
+
+    def test_unravel_index_1(self):
+        self.run_test("def np_unravel_index1(x, y): from numpy import unravel_index; return unravel_index(x, y, 'F')", 1621, (6, 7, 8, 9), np_unravel_index1=[int, Tuple[int, int, int, int]])
 
     def test_numpy_pow0(self):
         self.run_test('def numpy_pow0(a): return a ** 2',

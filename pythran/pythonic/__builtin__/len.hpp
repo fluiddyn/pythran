@@ -19,11 +19,6 @@ namespace __builtin__
     return sizeof...(Types);
   }
 
-  constexpr long len(char)
-  {
-    return 1;
-  }
-
   template <class T>
   typename std::enable_if<types::has_size<T>::value, long>::type len(T const &t)
   {
@@ -40,8 +35,6 @@ namespace __builtin__
                   "distance is ! really efficient without random iterators...");
     return std::distance(std::begin(t), std::end(t));
   }
-
-  DEFINE_FUNCTOR(pythonic::__builtin__, len);
 }
 PYTHONIC_NS_END
 #endif

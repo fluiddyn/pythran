@@ -4,8 +4,8 @@ This module performs the return type inference, according to symbolic types,
     * type_all generates a node -> type binding
 '''
 
-from pythran.analyses import (LazynessAnalysis, StrictAliases, YieldPoints,
-                              LocalNodeDeclarations)
+from pythran.analyses import LazynessAnalysis, StrictAliases, YieldPoints
+from pythran.analyses import LocalNodeDeclarations, Immediates
 from pythran.config import cfg
 from pythran.cxxtypes import TypeBuilder, ordered_set
 from pythran.intrinsic import UserFunction, Class
@@ -36,8 +36,6 @@ def extract_constructed_types(t):
     elif isinstance(t, tuple):
         return ([pytype_to_ctype(t)] +
                 sum((extract_constructed_types(v) for v in t), []))
-    elif t == long:
-        return [pytype_to_ctype(t)]
     elif t == str:
         return [pytype_to_ctype(t)]
     else:
@@ -70,7 +68,8 @@ class Types(ModuleAnalysis):
         self.combiners = defaultdict(UserFunction)
         self.current_global_declarations = dict()
         self.max_recompute = 1  # max number of use to be lazy
-        ModuleAnalysis.__init__(self, StrictAliases, LazynessAnalysis)
+        ModuleAnalysis.__init__(self, StrictAliases, LazynessAnalysis,
+                                Immediates)
         self.curr_locals_declaration = None
 
     def prepare(self, node, ctx):
@@ -100,11 +99,10 @@ class Types(ModuleAnalysis):
 
     def run(self, node, ctx):
         super(Types, self).run(node, ctx)
-        final_types = self.result.copy()
         for head in self.current_global_declarations.values():
-            if head not in final_types:
-                final_types[head] = "pythonic::types::none_type"
-        return final_types
+            if head not in self.result:
+                self.result[head] = "pythonic::types::none_type"
+        return self.result
 
     def register(self, ptype):
         """register ptype as a local typedef"""
@@ -413,11 +411,7 @@ class Types(ModuleAnalysis):
                 fake_node = ast.Call(fake_name, alias.args[1:] + node.args,
                                      [])
                 self.combiners[bounded_function].combiner(self, fake_node)
-                # force recombination of binded call
-                for n in self.strict_aliases[func]:
-                    self.result[n] = self.builder.ReturnType(
-                        self.result[alias.func],
-                        [self.result[arg] for arg in alias.args])
+
             # handle backward type dependencies from function calls
             else:
                 self.combiners[alias].combiner(self, node)
@@ -462,7 +456,11 @@ class Types(ModuleAnalysis):
         type converter.
         """
         ty = type(node.n)
-        self.result[node] = self.builder.NamedType(pytype_to_ctype(ty))
+        sty = pytype_to_ctype(ty)
+        if node in self.immediates:
+            sty = "std::integral_constant<%s, %s>" % (sty, node.n)
+
+        self.result[node] = self.builder.NamedType(sty)
 
     def visit_Str(self, node):
         """ Set the pythonic string type. """

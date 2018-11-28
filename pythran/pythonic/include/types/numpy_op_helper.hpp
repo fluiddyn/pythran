@@ -51,8 +51,14 @@ namespace types
   template <class T>
   struct any_numop_arg<T> : is_numexpr_arg<T> {
   };
+  template <>
+  struct any_numop_arg<empty_list> : std::false_type {
+  };
   template <class T>
   struct any_numop_arg<list<T>> : std::false_type {
+  };
+  template <class T, class S>
+  struct any_numop_arg<sliced_list<T, S>> : std::false_type {
   };
   template <class T, size_t N>
   struct any_numop_arg<array<T, N>> : std::false_type {

@@ -16,11 +16,9 @@ namespace __builtin__
 
     bool isdigit(types::str const &s)
     {
-      return !s.empty() &&
-             std::all_of(s.begin(), s.end(), (int (*)(int))std::isdigit);
+      return !s.empty() && std::all_of(s.chars().begin(), s.chars().end(),
+                                       (int (*)(int))std::isdigit);
     }
-
-    DEFINE_FUNCTOR(pythonic::__builtin__::str, isdigit);
   }
 }
 PYTHONIC_NS_END

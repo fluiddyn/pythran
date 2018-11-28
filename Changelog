@@ -1,3 +1,59 @@
+2018-11-06 Serge Guelton <serge.guelton@telecom-bretagne.eu>
+
+	* Moving to xsimd as vectorization engine, requires -DUSE_XSIMD
+
+	* Better support of view conversion from Python to Pythran
+
+	* Improved Cython integration
+
+	* Improved documentation, add exemple section
+
+	* Updated ArchLinux Packaging
+
+	* Remove useless warnings during compilation
+
+	* Faster ``abs(x**2)`` for complex numbers
+
+	* IPython magic now accepts most optimization flags
+
+	* Automatic detection of partially (or fully) constant shape for arrays
+
+	* Add ignoreflags settings to .pythranrc to skip some compiler flags
+
+	* Quad number (aka long double) basic support
+
+	* And many minor bugfixes, as usual :-)
+
+
+2018-09-16 Serge Guelton <serge.guelton@telecom-bretagne.eu>
+
+	* Decent support for ``is None`` pattern
+
+	* Bessel functions, aka scipy.special.stuff
+
+	* ``__builtin__.slice`` support
+
+	* ``np.unravel_index``, ``np.(u)intc`` support
+
+	* Cleanup and fix issues around sdist / build_ext and stuff
+
+	* O(1) View conversion to Python
+
+	* Dropped big int support
+
+	* Speed improvement for ``np.argmin``, ``np.argmax`` and square of complex
+
+	* Allow partially (or fully) constant shape for arrays
+
+	* Deterministic header inclusion (toward reproducible build?)
+
+	* Better error report on argument mismatch
+
+	* Better support for view arguments (but still lotta missing :-/)
+
+	* Better Windows support (fix compiler-specific bugs) incuding OpenMP
+
+
 2018-06-06 Serge Guelton <serge.guelton@telecom-bretagne.eu>
 
 	* Much better support of fancy indexing, still not 100% support though
@@ -13,7 +69,7 @@
 	* Most tests now work on Python 2 and Python 3
 
 	* Many bugfixes triggered by the bug report of Yann Diorcet, Jean Laroche
-	and David Menéndez Hurtado, Fabien Rozar, C. Claus
+	  and David Menéndez Hurtado, Fabien Rozar, C. Claus
 
 
 2018-04-23 Serge Guelton <serge.guelton@telecom-bretagne.eu>

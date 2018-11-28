@@ -21,11 +21,10 @@ namespace __builtin__
       if (first == -1)
         return types::str();
       else
-        return types::str(self.begin() + first,
-                          self.begin() + self.find_last_not_of(to_del) + 1);
+        return types::str(self.chars().begin() + first,
+                          self.chars().begin() + self.find_last_not_of(to_del) +
+                              1);
     }
-
-    DEFINE_FUNCTOR(pythonic::__builtin__::str, strip);
   }
 }
 PYTHONIC_NS_END

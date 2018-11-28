@@ -17,11 +17,10 @@ namespace __builtin__
     types::str lower(types::str const &s)
     {
       types::str copy = s;
-      std::transform(s.begin(), s.end(), copy.begin(), ::tolower);
+      std::transform(s.chars().begin(), s.chars().end(), copy.chars().begin(),
+                     ::tolower);
       return copy;
     }
-
-    DEFINE_FUNCTOR(pythonic::__builtin__::str, lower);
   }
 }
 PYTHONIC_NS_END

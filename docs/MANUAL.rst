@@ -39,7 +39,6 @@ Prerequisite
 
 Pythran depends on the following packages:
 
-- GMP: https://gmplib.org/
 - ply: http://www.dabeaz.com/ply/
 - networkx: https://networkx.github.io/
 - numpy: http://www.numpy.org/
@@ -173,10 +172,11 @@ To the input file. You can compile it as the previous code::
 
 and you'll get a decent binary. But what you really want to do is::
 
-    $> pythran -fopenmp -march=avx arc_distance.py
+    $> pythran -DUSE_XSIMD -fopenmp -march=native arc_distance.py
 
-which basically tells the compiler to parallelize and vectorize loops. Then you'll get **really** fast code!
-
+which basically tells the compiler to parallelize and vectorize loops using
+whatever hardware available on your machine. Then you'll get **really** fast
+code!
 
 
 Concerning Pythran specifications
@@ -203,14 +203,15 @@ set), introduced by the ``list`` (resp. ``set``) keyword::
                   | argument_type set    # this is a set
                   | argument_type []+    # this is a ndarray, C-style
                   | argument_type [::]+    # this is a strided ndarray
-                  | argument_type [:,...,:]+ # this is a ndarray, Cython
+                  | argument_type [:,...,:]+ # this is a ndarray, Cython style
+                  | argument_type [:,...,3]+ # this is a ndarray, some dimension fixed
                   | argument_type:argument_type dict    # this is a dictionary
 
-    basic_type = bool | int | long | float | str | None
+    basic_type = bool | int | float | str | None
                | uint8 | uint16 | uint32 | uint64 | uintp
                | int8 | int16 | int32 | int64 | intp
-               | float32 | float64
-               | complex64 | complex128
+               | float32 | float64 | float128
+               | complex64 | complex128 | complex256
 
 The same syntax can be used to export global variable (in read only mode)::
 
@@ -315,9 +316,13 @@ When distributing a Python application with Pythran modules, you can either:
     import setuptools
     setuptools.dist.Distribution(dict(setup_requires='pythran'))
 
-    from pythran.dist import PythranExtension
+    from pythran.dist import PythranExtension, PythranBuildExt
     setup(...,
-          ext_modules=[PythranExtension("mymodule", ["mymodule.py"])])
+          ext_modules=[PythranExtension("mymodule", ["mymodule.py"])],
+          cmdclass={"build_ext": PythranBuildExt})
+
+``PythranBuildExt`` is optional, but necessary to build extensions with
+different C++ compilers.
 
 Capsule Corp
 ------------
@@ -330,7 +335,9 @@ line::
     #pythran export capsule foo(double*, doule)
 
 Note that pointer types are only supported within the context of a capsule, as
-they don't match any real Python type.
+they don't match any real Python type. **Any** Pythran type is valid as capsule
+parameter, but beware that non scalar or pointer types only make sense withing
+the Pythran context.
 
 Advanced Usage
 --------------
@@ -347,7 +354,8 @@ Tired of typing the same compiler switches again and again? Store them in
 ``$XDG_CONFIG_HOME/.pythranrc``!
 
 Wants to try your own compiler? Update the `CC` and `CXX` fields from your
-`pythranrc`, or set the same env variables to the right compilers.
+`pythranrc`, or set the same env variables to the right compilers. Environment
+variables have greater precedence than configuration file.
 
 The careful reader might have noticed the ``-p`` flag from the command line. It
 makes it possible to define your own optimization sequence::
@@ -439,11 +447,10 @@ This section contains compiler flags configuration. For education purpose, the d
 
 :``defines``:
 
-    Preprocessor definitions. Pythran is sensible to ``USE_BOOST_SIMD`` and
-    ``PYTHRAN_OPENMP_MIN_ITERATION_COUNT``. The former turns on Boost.simd
+    Preprocessor definitions. Pythran is sensible to ``USE_XSIMD`` and
+    ``PYTHRAN_OPENMP_MIN_ITERATION_COUNT``. The former turns on `xsimd <https://github.com/QuantStack/xsimd>`_
     vectorization and the latter controls the mimimal loop trip count to turn a
-    sequential loop into a parallel loop. The default is to set ``USE_GMP``, so
-    that Python's longs are represented using GMP.
+    sequential loop into a parallel loop.
 
 :``undefs``:
 
@@ -451,11 +458,11 @@ This section contains compiler flags configuration. For education purpose, the d
 
 :``include_dirs``:
 
-    Additionnal include directories to search for headers.
+    Additional include directories to search for headers.
 
 :``cflags``:
 
-    Additionnal random compiler flags (``-f``, ``-O``). Optimization flags generally
+    Additional random compiler flags (``-f``, ``-O``). Optimization flags generally
     go there. The default is to set ``-std=c++11`` for C++11 support.
 
 :``libs``:
@@ -470,11 +477,18 @@ This section contains compiler flags configuration. For education purpose, the d
 
 :``ldflags``:
 
-    Additionnal random linker flags.
+    Additional random linker flags.
 
 :``blas``:
 
     BLAS library to use. Default is ``blas``, but ``atlas`` or ``mkl`` are also viable choices.
+
+:``ignoreflags``:
+
+    Space-separated list of compiler flags that should not be forwarded to the
+    pythran backend compiler when inherited, for instance, from
+    ``python-config``. For instance ``-Wstrict-prototypes`` is a C-only option
+    that should be pruned.
 
 
 ``[pythran]``

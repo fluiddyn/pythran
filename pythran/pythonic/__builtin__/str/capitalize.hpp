@@ -20,13 +20,12 @@ namespace __builtin__
         return s;
       else {
         types::str copy = s;
-        copy[0] = ::toupper(s[0]);
-        std::transform(s.begin() + 1, s.end(), copy.begin() + 1, ::tolower);
+        copy.chars()[0] = ::toupper(s.chars()[0]);
+        std::transform(s.chars().begin() + 1, s.chars().end(),
+                       copy.chars().begin() + 1, ::tolower);
         return copy;
       }
     }
-
-    DEFINE_FUNCTOR(pythonic::__builtin__::str, capitalize);
   }
 }
 PYTHONIC_NS_END

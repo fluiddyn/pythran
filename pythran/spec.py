@@ -8,7 +8,6 @@ from pythran.types.conversion import pytype_to_pretty_type
 from collections import defaultdict
 from itertools import product
 import re
-import sys
 import os.path
 import ply.lex as lex
 import ply.yacc as yacc
@@ -20,25 +19,28 @@ from pythran.syntax import PythranSyntaxError
 def ambiguous_types(ty0, ty1):
     from numpy import complex64, complex128
     from numpy import float32, float64
-    from numpy import int8, int16, int32, int64, intp
-    from numpy import uint8, uint16, uint32, uint64, uintp
+    from numpy import int8, int16, int32, int64, intp, intc
+    from numpy import uint8, uint16, uint32, uint64, uintp, uintc
+    try:
+        from numpy import complex256, float128
+    except ImportError:
+        complex256 = complex128
+        float128 = float64
 
     if isinstance(ty0, tuple):
         if len(ty0) != len(ty1):
             return False
         return all(ambiguous_types(t0, t1) for t0, t1 in zip(ty0, ty1))
 
-    ambiguous_float_types = float, float32, float64
+    ambiguous_float_types = float, float64
     if ty0 in ambiguous_float_types and ty1 in ambiguous_float_types:
         return True
 
-    ambiguous_cplx_types = complex, complex64, complex128
+    ambiguous_cplx_types = complex, complex128
     if ty0 in ambiguous_cplx_types and ty1 in ambiguous_cplx_types:
         return True
 
-    ambiguous_int_types = (int8, int16, int32, int64, intp,
-                           uint8, uint16, uint32, uint64, uintp,
-                           int,)
+    ambiguous_int_types = int64, int
     if ty0 in ambiguous_int_types and ty1 in ambiguous_int_types:
         return True
 
@@ -53,6 +55,14 @@ def ambiguous_types(ty0, ty1):
         return ambiguous_types(ty0.__args__[1:], ty1.__args__[1:])
     else:
         return ambiguous_types(ty0.__args__, ty1.__args__)
+
+
+def istransposed(t):
+    if not isinstance(t, NDArray):
+        return False
+    if len(t.__args__) - 1 != 2:
+        return False
+    return t.__args__[1] == t.__args__[2] == slice(-1, None, None)
 
 
 class Spec(object):
@@ -83,9 +93,8 @@ class Spec(object):
 
     def to_docstrings(self, docstrings):
         for func_name, signatures in self.functions.items():
-            sigdocs = [spec_to_string(func_name, sig) for sig in signatures]
-            docstring_prototypes = 'Supported prototypes:\n{}'.format(
-                ''.join('\n    - ' + sigdoc for sigdoc in sigdocs))
+            sigdocs = signatures_to_string(func_name, signatures)
+            docstring_prototypes = 'Supported prototypes:\n{}'.format(sigdocs)
             docstring_py = docstrings.get(func_name, '')
             if not docstring_py:
                 docstring = docstring_prototypes
@@ -136,9 +145,9 @@ class SpecParser(object):
     A parser that scans a file lurking for lines such as the one below.
 
     It then generates a pythran-compatible signature to inject into compile.
-#pythran export a((float,(int,long),str list) list list)
+#pythran export a((float,(int, uint8),str list) list list)
 #pythran export a(str)
-#pythran export a( (str,str), int, long list list)
+#pythran export a( (str,str), int, int16 list list)
 #pythran export a( {str} )
 """
 
@@ -152,16 +161,20 @@ class SpecParser(object):
         'uint16': 'UINT16',
         'uint32': 'UINT32',
         'uint64': 'UINT64',
+        'uintc': 'UINTC',
         'uintp': 'UINTP',
         'int8': 'INT8',
         'int16': 'INT16',
         'int32': 'INT32',
         'int64': 'INT64',
+        'intc': 'INTC',
         'intp': 'INTP',
         'float32': 'FLOAT32',
         'float64': 'FLOAT64',
+        'float128': 'FLOAT128',
         'complex64': 'COMPLEX64',
         'complex128': 'COMPLEX128',
+        'complex256': 'COMPLEX256',
         }
 
     reserved = {
@@ -173,19 +186,18 @@ class SpecParser(object):
         'set': 'SET',
         'dict': 'DICT',
         'str': 'STR',
-        'long': 'LONG',
         'None': 'NONE',
         }
     reserved.update(dtypes)
 
     tokens = ('IDENTIFIER', 'COMMA', 'COLUMN', 'LPAREN', 'RPAREN', 'CRAP',
-              'LARRAY', 'RARRAY', 'STAR') + tuple(reserved.values())
+              'LARRAY', 'RARRAY', 'STAR', 'NUM') + tuple(reserved.values())
 
     crap = [tok for tok in tokens if tok != 'PYTHRAN']
     some_crap = [tok for tok in crap if tok not in ('LPAREN', 'COMMA')]
 
     # token <> regexp binding
-    t_CRAP = r'[^,:\(\)\[\]*]'
+    t_CRAP = r'[^,:\(\)\[\]*0-9]'
     t_COMMA = r','
     t_COLUMN = r':'
     t_LPAREN = r'\('
@@ -193,17 +205,12 @@ class SpecParser(object):
     t_RARRAY = r'\]'
     t_LARRAY = r'\['
     t_STAR = r'\*'
+    t_NUM = r'[1-9][0-9]*'
 
     precedence = (
         ('left', 'OR'),
         ('left', 'LIST', 'DICT', 'SET'),
     )
-
-    # regexp to extract pythran specs from comments
-    # the first part matches lines with a comment and the pythran keyword
-    # the second part matches lines with comments following the pythran ones
-    FILTER = re.compile(r'^\s*#\s*pythran[^\n\r]*[\n\r]*'
-                        r'^(?:\s*#[^\n\r]*[\n\r]*)*', re.MULTILINE)
 
     def t_IDENTIFER(self, t):
         r'\#?[a-zA-Z_][a-zA-Z_0-9]*'
@@ -349,27 +356,24 @@ class SpecParser(object):
 
     def p_array_index(self, p):
         '''array_index :
+                       | NUM
                        | COLUMN
                        | COLUMN COLUMN'''
         if len(p) == 3:
             p[0] = slice(0, -1, -1)
-        else:
+        elif len(p) == 1 or p[1] == ':':
             p[0] = slice(0, -1, 1)
+        else:
+            p[0] = slice(0, int(p[1]), 1)
 
     def p_term(self, p):
         '''term : STR
                 | NONE
-                | LONG
                 | dtype'''
         if p[1] == 'str':
             p[0] = str
         elif p[1] == 'None':
             p[0] = type(None)
-        elif p[1] == 'long':
-            if sys.version_info.major == 3:
-                p[0] = int
-            else:
-                p[0] = long
         else:
             p[0] = p[1][0]
 
@@ -404,11 +408,24 @@ class SpecParser(object):
         self.input_file = None
 
         data = self.read_path_or_text(path_or_text)
+        lines = []
+        in_pythran_export = False
+        for line in data.split("\n"):
+            if re.match(r'\s*#\s*pythran', line):
+                in_pythran_export = True
+                lines.append(re.sub(r'\s*#\s*pythran', '#pythran', line))
+            elif in_pythran_export:
+                stripped = line.strip()
+                if stripped.startswith('#'):
+                    lines.append(line.replace('#', ''))
+                else:
+                    in_pythran_export = not stripped
+                    lines.append('')
+            else:
+                in_pythran_export &= not line.strip()
+                lines.append('')
 
-        raw = "\n".join(SpecParser.FILTER.findall(data))
-        pythran_data = (re.sub(r'#\s*pythran', '\_o< pythran >o_/', raw)
-                        .replace('#', '')
-                        .replace('\_o< pythran >o_/', '#pythran'))
+        pythran_data = '\n'.join(lines)
         self.parser.parse(pythran_data, lexer=self.lexer, debug=False)
 
         for key, overloads in self.native_exports.items():
@@ -449,6 +466,14 @@ class ExtraSpecParser(SpecParser):
 def spec_to_string(function_name, spec):
     arguments_types = [pytype_to_pretty_type(t) for t in spec]
     return '{}({})'.format(function_name, ', '.join(arguments_types))
+
+
+def signatures_to_string(func_name, signatures):
+    # filter out transposed version, they are confusing for some users
+    # and can generate very long docstring that break MSVC
+    sigdocs = [spec_to_string(func_name, sig) for sig in signatures
+               if not any(istransposed(t) for t in sig)]
+    return ''.join('\n    - ' + sigdoc for sigdoc in sigdocs)
 
 
 def spec_parser(path_or_text):

@@ -161,6 +161,11 @@ class ArgumentEffects(ModuleAnalysis):
                     if isinstance(func_alias, ast.Call):
                         bound_name = func_alias.args[0].id
                         func_alias = self.global_declarations[bound_name]
+                    if func_alias is intrinsic.UnboundValue:
+                        continue
+                    if func_alias not in self.node_to_functioneffect:
+                        continue
+
                     func_alias = self.node_to_functioneffect[func_alias]
                     predecessors = self.result.predecessors(func_alias)
                     if self.current_function not in predecessors:

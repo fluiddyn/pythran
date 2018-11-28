@@ -4,6 +4,7 @@
 #include "pythonic/include/operator_/lt.hpp"
 
 #include "pythonic/utils/functor.hpp"
+#include <cstring>
 
 PYTHONIC_NS_BEGIN
 
@@ -15,8 +16,10 @@ namespace operator_
   {
     return a < b;
   }
-
-  DEFINE_FUNCTOR(pythonic::operator_, lt);
+  bool lt(char const *self, char const *other)
+  {
+    return strcmp(self, other) < 0;
+  }
 }
 PYTHONIC_NS_END
 
